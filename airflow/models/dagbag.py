@@ -30,7 +30,6 @@ import zipfile
 from collections import namedtuple
 from datetime import datetime
 
-import psutil
 from croniter import CroniterBadCronError, CroniterBadDateError, CroniterNotAlphaError, croniter
 import six
 
@@ -91,7 +90,6 @@ class DagBag(BaseDagBag, LoggingMixin):
         if executor is None:
             executor = get_default_executor()
         dag_folder = dag_folder or settings.DAGS_FOLDER
-        self.log.info("Filling up the DagBag from %s", dag_folder)
         self.dag_folder = dag_folder
         self.dags = {}
         # the file's last modified timestamp when we last read it
@@ -101,8 +99,10 @@ class DagBag(BaseDagBag, LoggingMixin):
         self.has_logged = False
         self.include_examples = include_examples
         self.safe_mode = safe_mode
+        self.collect_dags_on_init = collect_dags_on_init
 
         if collect_dags_on_init:
+            self.log.info("Filling up the DagBag from %s", dag_folder)
             self.collect_dags(
                 dag_folder=dag_folder,
                 include_examples=include_examples,
@@ -203,7 +203,7 @@ class DagBag(BaseDagBag, LoggingMixin):
             if mod_name in sys.modules:
                 del sys.modules[mod_name]
 
-            with timeout(self.DAGBAG_IMPORT_TIMEOUT):
+            def source_loader(self):
                 try:
                     m = imp.load_source(mod_name, filepath)
                     mods.append(m)
@@ -211,6 +211,13 @@ class DagBag(BaseDagBag, LoggingMixin):
                     self.log.exception("Failed to import: %s", filepath)
                     self.import_errors[filepath] = str(e)
                     self.file_last_changed[filepath] = file_last_changed_on_disk
+
+            if self.collect_dags_on_init:
+                with timeout(self.DAGBAG_IMPORT_TIMEOUT):
+                    source_loader(self)
+            else:
+                # this will not be on main thread so timeout signal is not supported
+                source_loader(self)
 
         else:
             zip_file = zipfile.ZipFile(filepath)

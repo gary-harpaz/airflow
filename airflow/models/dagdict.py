@@ -7,7 +7,7 @@ from airflow.utils.db import create_session
 from datetime import datetime
 
 
-class OptimizedDagBag(LoggingMixin):
+class DagDict(LoggingMixin):
     def __init__(
             self,
             dag_folder=None,
@@ -18,13 +18,6 @@ class OptimizedDagBag(LoggingMixin):
                                     include_examples=include_examples, safe_mode=safe_mode)
         self.file_last_changes_dict = {}
         self.file_last_changes_dict.setdefault(None)
-
-    def init_dag_file_by_id(self):
-        with create_session() as session:
-            DM = models.DagModel
-            orm_dags = session.query(DM).with_entities(DM.dag_id, DM.fileloc).all()
-            for orm_dag in orm_dags:
-                self.dag_file_by_id[orm_dag.dag_id] = orm_dag.fileloc
 
     def _get_cached_dag(self, dag_id):
         dag = self.dagbag.dags.get(dag_id)

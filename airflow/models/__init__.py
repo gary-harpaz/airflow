@@ -22,7 +22,7 @@ from airflow.models.baseoperator import BaseOperator  # noqa: F401
 from airflow.models.connection import Connection  # noqa: F401
 from airflow.models.dag import DAG, DagModel  # noqa: F401
 from airflow.models.dagbag import DagBag  # noqa: F401
-from airflow.models.optimized_dagbag import OptimizedDagBag
+from airflow.models.dagdict import DagDict
 from airflow.models.dagpickle import DagPickle  # noqa: F401
 from airflow.models.dagrun import DagRun  # noqa: F401
 from airflow.models.errors import ImportError  # noqa: F401, pylint:disable=redefined-builtin
