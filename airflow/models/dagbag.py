@@ -23,13 +23,12 @@ from __future__ import unicode_literals
 import hashlib
 import imp
 import importlib
-import math
 import os
 import sys
 import textwrap
 import zipfile
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import psutil
 from croniter import CroniterBadCronError, CroniterBadDateError, CroniterNotAlphaError, croniter
@@ -119,7 +118,7 @@ class DagBag(BaseDagBag, LoggingMixin):
     def dag_ids(self):
         return self.dags.keys()
 
-    def get_dag(self, dag_id, orm_dag=None):
+    def get_dag(self, dag_id):
         """
         Gets the DAG out of the dictionary, and refreshes it if expired
         """
@@ -133,8 +132,7 @@ class DagBag(BaseDagBag, LoggingMixin):
                 root_dag_id = dag.parent_dag.dag_id
 
         # If the dag corresponding to root_dag_id is absent or expired
-        if orm_dag is None:
-            orm_dag = DagModel.get_current(root_dag_id)
+        orm_dag = DagModel.get_current(root_dag_id)
         if orm_dag and (
                 root_dag_id not in self.dags or
                 (
@@ -153,13 +151,11 @@ class DagBag(BaseDagBag, LoggingMixin):
                 del self.dags[dag_id]
         return self.dags.get(dag_id)
 
-    def process_file(self, filepath, only_if_updated=True, safe_mode=True, context=None):
+    def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
         Given a path to a python module or zip file, this method imports
         the module and look for dag objects within it.
         """
-        if context is None:
-            print("xxx1: "+str(psutil.Process().pid)+" Processing file: "+filepath+" context is None")
         from airflow.models.dag import DAG  # Avoid circular import
 
         found_dags = []
@@ -177,13 +173,11 @@ class DagBag(BaseDagBag, LoggingMixin):
             if only_if_updated \
                     and filepath in self.file_last_changed \
                     and file_last_changed_on_disk == self.file_last_changed[filepath]:
-                print("xxx2: "+str(psutil.Process().pid)+" Processing file: " + filepath + " it was cached")
                 return found_dags
 
         except Exception as e:
             self.log.exception(e)
             return found_dags
-        start_process = datetime.now()
         mods = []
         is_zipfile = zipfile.is_zipfile(filepath)
         if not is_zipfile:
@@ -282,20 +276,6 @@ class DagBag(BaseDagBag, LoggingMixin):
                             file_last_changed_on_disk
 
         self.file_last_changed[filepath] = file_last_changed_on_disk
-        process_end = datetime.now()
-        process_duration = process_end - start_process
-        if context is not None:
-            context['file_num'] += 1
-            context['average_duration'] = (context['average_duration']*(context['file_num'] - 1) + process_duration.total_seconds()) / context['file_num']
-            progress = math.floor(context['file_num'] / context['total_files'] * 100 )
-            if (process_end - context['last_progress']) > timedelta(seconds=8) or progress == 100:
-                context['last_progress'] = process_end
-                print("xxx3: " + str(psutil.Process().pid) + " Processing files, progress: "+str(progress)+", since_start: "+str(math.ceil((process_end - context['start_collect']).total_seconds()))+
-                      ", average "+str(context['average_duration']*1000)+" milis")
-        else:
-            print("xxx4: " + str(psutil.Process().pid) + " Processing file: " + filepath + " ,no context, duration: " + str(process_duration.total_seconds()*1000)+" milis")
-
-
         return found_dags
 
     @provide_session
@@ -394,19 +374,12 @@ class DagBag(BaseDagBag, LoggingMixin):
 
         files_in_path = list_py_file_paths(dag_folder, safe_mode=safe_mode,
                                            include_examples=include_examples)
-        collect_context = {
-            'total_files': len(files_in_path),
-            'file_num': 0,
-            'last_progress': datetime.now() - timedelta(days=1),
-            'start_collect': datetime.now(),
-            'average_duration': 0
-        }
         for filepath in files_in_path:
             try:
                 ts = timezone.utcnow()
                 found_dags = self.process_file(
                     filepath, only_if_updated=only_if_updated,
-                    safe_mode=safe_mode, context=collect_context)
+                    safe_mode=safe_mode)
                 dag_ids = [dag.dag_id for dag in found_dags]
                 dag_id_names = str(dag_ids)
 
